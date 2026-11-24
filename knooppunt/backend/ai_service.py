@@ -164,7 +164,14 @@ def _chat_json(
                 f"De AI-provider gaf een fout: {exc}", status_code=503
             ) from exc
 
-    content = response.choices[0].message.content or ""
+    choice = response.choices[0]
+    content = choice.message.content or ""
+    if getattr(choice, "finish_reason", None) == "length":
+        logger.warning(
+            "AI-antwoord afgekapt door max_tokens (%s tekens ontvangen); "
+            "JSON wordt zo goed mogelijk hersteld.",
+            len(content),
+        )
     if not content.strip():
         raise AIServiceError(
             "Het AI-model gaf een leeg antwoord. Probeer het opnieuw.",
@@ -173,49 +180,118 @@ def _chat_json(
     return content
 
 
+def _strip_trailing_commas(text: str) -> str:
+    """Verwijdert komma's vlak voor } of ] (buiten strings)."""
+    out: list[str] = []
+    in_str = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_str:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            out.append(ch)
+            continue
+        if ch in "}]":
+            j = len(out) - 1
+            while j >= 0 and out[j] in " \t\r\n":
+                j -= 1
+            if j >= 0 and out[j] == ",":
+                del out[j]
+        out.append(ch)
+    return "".join(out)
+
+
+def _repair_truncated_json(text: str) -> str | None:
+    """Herstelt een afgekapt JSON-object: knipt terug tot het laatst volledig
+    afgewerkte element en sluit alle open haakjes."""
+    stack: list[str] = []
+    in_str = False
+    escape = False
+    safe_cut = -1
+    safe_stack: list[str] = []
+    for i, ch in enumerate(text):
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if not stack:
+                break
+            stack.pop()
+            if not stack:
+                return text[: i + 1]
+            safe_cut, safe_stack = i + 1, list(stack)
+        elif ch == "," and stack:
+            # Alles vóór deze komma is een volledig element.
+            safe_cut, safe_stack = i, list(stack)
+    if safe_cut == -1:
+        return None
+    repaired = text[:safe_cut].rstrip().rstrip(",")
+    return repaired + "".join(reversed(safe_stack))
+
+
 def extract_json_object(raw_text: str) -> dict[str, Any]:
-    """Haalt een JSON-object uit modeluitvoer, ook met think-blokken/fences."""
+    """Haalt een JSON-object uit modeluitvoer, ook met think-blokken/fences,
+    extra tekst rondom, trailing komma's of een afgekapt einde."""
     text = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", raw_text, flags=re.DOTALL)
+    # Onafgesloten think-blok (afgekapt): alles tot na </think> negeren kan niet,
+    # dus enkel de openingstag weghalen.
+    text = re.sub(r"<think\b[^>]*>", "", text)
     text = re.sub(r"```(?:json)?", "", text, flags=re.IGNORECASE)
     text = text.replace("```", "")
+    text = text.replace("“", '"').replace("”", '"') if text.count('"') == 0 else text
+
+    def _fail(reason: str) -> AIServiceError:
+        logger.error(
+            "%s Ruwe model-output (eerste 1500 / laatste 500 tekens): %s ... %s",
+            reason,
+            raw_text[:1500] or "<leeg>",
+            raw_text[-500:],
+        )
+        return AIServiceError(
+            "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
+            status_code=502,
+        )
 
     start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end <= start:
-        logger.error(
-            "Geen JSON-object gevonden. Ruwe model-output (eerste 1500 tekens): %s",
-            raw_text[:1500] or "<leeg>",
-        )
-        raise AIServiceError(
-            "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
-            status_code=502,
-        )
+    if start == -1:
+        raise _fail("Geen JSON-object gevonden.")
+    body = text[start:]
 
-    candidate = text[start : end + 1]
-    try:
-        parsed = json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        logger.error(
-            "JSON-parsefout: %s. Ruwe model-output (eerste 1500 tekens): %s",
-            exc,
-            raw_text[:1500] or "<leeg>",
-        )
-        raise AIServiceError(
-            "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
-            status_code=502,
-        ) from exc
+    decoder = json.JSONDecoder()
+    attempts = [body, _strip_trailing_commas(body)]
+    repaired = _repair_truncated_json(_strip_trailing_commas(body))
+    if repaired:
+        attempts.append(repaired)
 
-    if not isinstance(parsed, dict):
-        logger.error(
-            "JSON is geen object maar %s. Ruwe model-output (eerste 1500 tekens): %s",
-            type(parsed).__name__,
-            raw_text[:1500] or "<leeg>",
-        )
-        raise AIServiceError(
-            "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
-            status_code=502,
-        )
-    return parsed
+    last_error: Exception | None = None
+    for idx, candidate in enumerate(attempts):
+        try:
+            parsed, _ = decoder.raw_decode(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        if isinstance(parsed, dict):
+            if idx == 2:
+                logger.warning("Afgekapte JSON hersteld; laatste onvolledige deel genegeerd.")
+            return parsed
+    raise _fail(f"JSON-parsefout: {last_error}.")
 
 
 def _reachable(adjacency: dict[str, set[str]], start: str, goal: str) -> bool:
@@ -518,17 +594,30 @@ def generate_course_graph(
 
     content = ""
     try:
-        content = _chat_json(
-            client,
-            settings.LAYER1_MODEL,
-            LAYER1_SYSTEM_PROMPT,
-            user_prompt,
-            temperature=0.2,
-            max_tokens=8192,
-        )
-        _increment_metric(db, "layer1_calls")
-        data = extract_json_object(content)
-        return _sanitize_graph(data)
+        data: dict[str, Any] | None = None
+        for attempt in range(2):
+            content = _chat_json(
+                client,
+                settings.LAYER1_MODEL,
+                LAYER1_SYSTEM_PROMPT,
+                user_prompt
+                if attempt == 0
+                else user_prompt
+                + "\n\nLET OP: je vorige antwoord was geen geldig JSON. Antwoord "
+                "nu ENKEL met het JSON-object, zonder uitleg, en houd de "
+                "explanations kort.",
+                temperature=0.2,
+                max_tokens=16384,
+            )
+            _increment_metric(db, "layer1_calls")
+            try:
+                data = extract_json_object(content)
+                break
+            except AIServiceError:
+                if attempt == 1:
+                    raise
+                logger.warning("Laag 1: ongeldige JSON, één herkansing.")
+        return _sanitize_graph(data or {})
     except AIServiceError:
         logger.error(
             "Laag 1 mislukt. Ruwe model-output (eerste 1500 tekens): %s",
