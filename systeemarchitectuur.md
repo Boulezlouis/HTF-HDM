@@ -23,7 +23,7 @@ De applicatie gebruikt een rustige **Master-Detail layout** bestaande uit een va
 
 ```text
 +-----------------------------------------------------------------------------------+
-|  SIDEBAR (vast, 260px)     |  HOOFDCANVAS (Interactieve Knowledge Graph)          |
+|  SIDEBAR (uitklapbaar, 260px)     |  HOOFDCANVAS (Interactieve Knowledge Graph)          |
 |----------------------------|------------------------------------------------------|
 |  [Logo] KnoopPunt          |  Header: [Naam Vak]   Voortgang: 4/10 knopen (40%)   |
 |                            |------------------------------------------------------|
@@ -61,7 +61,7 @@ De applicatie gebruikt een rustige **Master-Detail layout** bestaande uit een va
    * **Verbindingslijnen (Edges):** Gerichte pijlen die tonen hoe concepten op elkaar steunen (optioneel met een kort relatielabel bij hover, bijv. *"bouwt voort op"* of *"is voorwaarde voor"*).
 
 3. **Knoop-Drawer (Slide-over paneel aan de rechterkant)**
-   * Opent wanneer de student op een knoop in de graaf klikt, terwijl de graaf links zichtbaar blijft voor ruimtelijke context.
+   * Opent wanneer de student op een knoop in de graaf klikt, terwijl de graaf links zichtbaar blijft voor ruimtelijke context. De node zal oplichten afhankelijk welke aangeduid is. 
    * **Tab 1 — Kern & Verbanden:**
      * Beknopte, scanbare samenvatting van het onderwerp (geen lange muren tekst; max. 3–5 kernpunten).
      * Visuele chips met directe links naar gerelateerde voorgaande knopen (*"Hangt samen met: Basisconcept A"*).
@@ -81,7 +81,7 @@ De applicatie gebruikt een rustige **Master-Detail layout** bestaande uit een va
 ## 3. De 3-Lagen Zuinige AI-Architectuur
 
 Dit is de technische én zakelijke kern van het platform. Elke laag gebruikt de lichtst mogelijke technologie die nodig is voor die taak.
-
+Gebruik deze repo voor de pdf's naar md omtezetten voor het model te verwerken: https://github.com/ssine/pptx2md
 ```text
 [Upload PDF/PPTX]
        │
@@ -120,7 +120,37 @@ Dit is de technische én zakelijke kern van het platform. Elke laag gebruikt de 
 * **Strict JSON Output:** Laag 1 vraagt één strak gestructureerd JSON-schema op (nodes, edges, samenvattingen en basisvragen in één of zo weinig mogelijk calls) in plaats van tientallen losse prompts.
 * **Edge-Caching:** Zodra het redeneermodel (Laag 3) een 20%-verbindingsvraag heeft opgesteld tussen knoop A en knoop B, wordt die vraag opgeslagen bij de `Edge` in de database. De volgende keer kost die vraag **0 tokens**.
 * **Geen open chatbox:** Omdat er geen vrije chatbot aanwezig is, zijn er geen eindeloze gespreksgeschiedenissen die bij elke beurt opnieuw als context-tokens verstuurd moeten worden.
+## Documentvoorverwerking (token- en energiebesparing)
 
+**Beslissing**
+PDF- en PowerPoint-bestanden worden lokaal omgezet naar compacte Markdown
+voordat er inhoud naar een AI-model gaat. Hiervoor gebruiken we MarkItDown
+(PPTX) en pdfplumber (PDF), gevolgd door een eigen opschoonstap (`docs2md.py`).
+Docling is de uitwijkoptie voor complexe layouts, tabellen en gescande PDF's (OCR).
+
+**Opschoonregels**
+- Regels die op ≥ 50% van de pagina's terugkomen (headers, footers) worden verwijderd.
+- Losse paginanummers ("3", "Pagina 3 van 10") worden verwijderd.
+- Pagina's of slides met minder dan 3 woorden worden overgeslagen.
+- De titelpagina wordt samengevat tot één contextregel.
+- Afbeeldingen worden standaard niet meegestuurd.
+- Sprekersnotities worden apart opgeslagen en alleen op verzoek meegestuurd.
+
+**Caching**
+Elk bestand wordt één keer verwerkt. Op basis van een hash van de inhoud
+wordt bij ongewijzigde bestanden het eerdere resultaat hergebruikt.
+
+**Motivatie**
+- Minder tokens per verzoek, dus lagere kosten en minder energieverbruik.
+- De voorverwerking draait volledig lokaal en verbruikt zelf geen tokens.
+- Gevoelige ruis (bv. vertrouwelijkheidsfooters) verlaat de omgeving niet.
+
+**Beperkingen en risico's**
+- Gescande PDF's zonder tekstlaag vereisen OCR (Docling).
+- Herhaalde inhoud die wél relevant is, kan onterecht verwijderd worden;
+  de drempel is instelbaar (`--drempel`).
+- Tokenbesparing wordt geschat (≈ 4 tekens/token) en moet per documenttype
+  gemeten worden. Op testbestanden: ca. 50% reductie.
 ---
 
 ## 4. Datamodel
