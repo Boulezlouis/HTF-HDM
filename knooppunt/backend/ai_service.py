@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models import Node, Question, UsageMetric
-from schemas import AIBridgeQuestion, AICoreQuestion, AINode, AIOpenEvaluation
+from schemas import AIBridgeQuestion, AIOpenEvaluation
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,18 @@ LAYER1_SYSTEM_PROMPT = (
     "`key_points`.\n"
     "- Per knoop: exact 5 `core_questions` (meerkeuzevragen `mcq` met 4 opties, "
     "exact 1 juist antwoord dat letterlijk overeenkomt met een van de 4 opties, "
-    "en een korte `explanation` van max 2 zinnen)."
+    "en een korte `explanation` van max 2 zinnen).\n"
+    "- Per knoop: `difficulty` (geheel getal 1..5: hoe conceptueel moeilijk het "
+    "onderwerp is) en `content_volume` (geheel getal 1..5: hoeveel leerstof en "
+    "details dit onderwerp in het document omvat).\n"
+    "Verplicht formaat (voorbeeld):\n"
+    '{"description": "Korte omschrijving van het vak (1 zin)", '
+    '"nodes": [{"temp_key": "n1", "title": "Korte concepttitel", '
+    '"summary": "Max 3 heldere zinnen.", "key_points": ["Punt 1", "Punt 2", "Punt 3"], '
+    '"difficulty": 3, "content_volume": 3, "core_questions": [{"prompt": "Vraagtekst?", '
+    '"options": ["Optie A", "Optie B", "Optie C", "Optie D"], '
+    '"correct_answer": "Optie A", "explanation": "Waarom Optie A juist is."}]}], '
+    '"edges": [{"source": "n1", "target": "n2", "relation_label": "is voorwaarde voor"}]}'
 )
 
 LAYER3_BRIDGE_SYSTEM_PROMPT = (
@@ -118,6 +130,7 @@ def _chat_json(
     system_prompt: str,
     user_prompt: str,
     temperature: float | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     kwargs: dict[str, Any] = {
         "model": model,
@@ -129,14 +142,27 @@ def _chat_json(
     }
     if temperature is not None:
         kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
 
     try:
         response = client.chat.completions.create(**kwargs)
-    except Exception as exc:  # provider-/netwerkfout
-        logger.exception("AI-call mislukt")
-        raise AIServiceError(
-            f"De AI-provider gaf een fout: {exc}", status_code=503
-        ) from exc
+    except Exception as first_error:
+        # Sommige OpenAI-compatibele providers ondersteunen response_format
+        # niet. Doe exact één retry zonder die parameter.
+        logger.warning(
+            "Eerste AI-call met response_format mislukt (%s); retry zonder.",
+            first_error,
+        )
+        retry_kwargs = dict(kwargs)
+        retry_kwargs.pop("response_format", None)
+        try:
+            response = client.chat.completions.create(**retry_kwargs)
+        except Exception as exc:  # provider-/netwerkfout
+            logger.exception("AI-call mislukt, ook zonder response_format")
+            raise AIServiceError(
+                f"De AI-provider gaf een fout: {exc}", status_code=503
+            ) from exc
 
     content = response.choices[0].message.content or ""
     if not content.strip():
@@ -147,21 +173,44 @@ def _chat_json(
     return content
 
 
-def _parse_json(content: str) -> dict[str, Any]:
+def extract_json_object(raw_text: str) -> dict[str, Any]:
+    """Haalt een JSON-object uit modeluitvoer, ook met think-blokken/fences."""
+    text = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", raw_text, flags=re.DOTALL)
+    text = re.sub(r"```(?:json)?", "", text, flags=re.IGNORECASE)
+    text = text.replace("```", "")
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        logger.error(
+            "Geen JSON-object gevonden. Ruwe model-output (eerste 1500 tekens): %s",
+            raw_text[:1500] or "<leeg>",
+        )
+        raise AIServiceError(
+            "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
+            status_code=502,
+        )
+
+    candidate = text[start : end + 1]
     try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        # Soms omhult een model de JSON met tekst; pak het buitenste object.
-        start, end = content.find("{"), content.rfind("}")
-        if start != -1 and end > start:
-            try:
-                parsed = json.loads(content[start : end + 1])
-            except json.JSONDecodeError:
-                parsed = None
-        else:
-            parsed = None
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError as exc:
+        logger.error(
+            "JSON-parsefout: %s. Ruwe model-output (eerste 1500 tekens): %s",
+            exc,
+            raw_text[:1500] or "<leeg>",
+        )
+        raise AIServiceError(
+            "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
+            status_code=502,
+        ) from exc
 
     if not isinstance(parsed, dict):
+        logger.error(
+            "JSON is geen object maar %s. Ruwe model-output (eerste 1500 tekens): %s",
+            type(parsed).__name__,
+            raw_text[:1500] or "<leeg>",
+        )
         raise AIServiceError(
             "Het AI-model gaf geen geldig JSON-object terug. Probeer het opnieuw.",
             status_code=502,
@@ -227,61 +276,190 @@ def _sanitize_edges(
     return edges
 
 
+def _clamp_scale(value: Any, default: int = 3) -> int:
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(5, parsed))
+
+
+def _normalize_key_points(raw_points: Any, summary: str) -> list[str]:
+    points: list[str] = []
+    if isinstance(raw_points, str):
+        for line in raw_points.splitlines():
+            cleaned = re.sub(r"^\s*[-*•]\s*", "", line).strip()
+            if cleaned:
+                points.append(cleaned)
+    elif isinstance(raw_points, list):
+        for item in raw_points:
+            if isinstance(item, dict):
+                text = str(
+                    item.get("point") or item.get("text") or ""
+                ).strip()
+            else:
+                text = str(item).strip()
+            if text:
+                points.append(text)
+
+    if not points:
+        points = [summary]
+    return points[:5]
+
+
+def _normalize_correct_answer(answer: Any, options: list[str]) -> str:
+    raw = str(answer or "").strip()
+    if raw in options:
+        return raw
+
+    lowered = {option.lower(): option for option in options}
+    if raw.lower() in lowered:
+        return lowered[raw.lower()]
+
+    match = re.match(r"^\s*([A-Za-z])\s*(?:[).:\-]|$)", raw)
+    if match:
+        index = ord(match.group(1).lower()) - ord("a")
+        if 0 <= index < len(options):
+            return options[index]
+
+    # Laatste fallback: nooit een geldige knoop weggooien om dit detail.
+    return options[0]
+
+
+def _normalize_core_question(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+
+    prompt = str(
+        raw.get("prompt") or raw.get("question") or raw.get("vraag") or ""
+    ).strip()
+    raw_options = raw.get("options") or raw.get("choices") or raw.get("opties") or []
+    if isinstance(raw_options, dict):
+        raw_options = list(raw_options.values())
+    if not isinstance(raw_options, list):
+        raw_options = []
+    options = [str(option).strip() for option in raw_options if str(option).strip()]
+
+    if not prompt or len(options) < 2:
+        logger.warning(
+            "Kernvraag overgeslagen (prompt of opties ontbreken): %s", raw
+        )
+        return None
+
+    correct = _normalize_correct_answer(
+        raw.get("correct_answer")
+        or raw.get("answer")
+        or raw.get("juiste_antwoord"),
+        options,
+    )
+    explanation = str(
+        raw.get("explanation") or raw.get("uitleg") or ""
+    ).strip() or "Geen uitleg beschikbaar."
+
+    return {
+        "prompt": prompt,
+        "options": options,
+        "correct_answer": correct,
+        "explanation": explanation,
+    }
+
+
 def _sanitize_graph(data: dict[str, Any]) -> dict[str, Any]:
-    description = str(data.get("description") or "").strip()
+    description = str(
+        data.get("description") or data.get("beschrijving") or ""
+    ).strip()
+
     raw_nodes = data.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raw_nodes = data.get("concepts")
     if not isinstance(raw_nodes, list) or not raw_nodes:
+        logger.error(
+            "AI-uitvoer bevat geen nodes/concepts. Aanwezige sleutels: %s",
+            list(data.keys()),
+        )
         raise AIServiceError(
-            "Het AI-model leverde geen geldige knopen. Probeer het opnieuw.",
+            "Het AI-model leverde geen bruikbare knopen. Probeer het opnieuw.",
             status_code=502,
         )
 
     nodes: list[dict[str, Any]] = []
-    for raw in raw_nodes[:10]:
-        try:
-            node = AINode.model_validate(raw)
-        except ValidationError as exc:
-            logger.warning("Ongeldige knoop overgeslagen: %s", exc)
+    for index, raw in enumerate(raw_nodes[:10]):
+        if not isinstance(raw, dict):
+            logger.warning("Knoop %d overgeslagen: geen JSON-object.", index)
             continue
 
-        title = node.title.strip()
-        summary = node.summary.strip()
-        if not title or not summary:
+        title = str(
+            raw.get("title") or raw.get("name") or raw.get("titel") or ""
+        ).strip()
+        summary = str(
+            raw.get("summary")
+            or raw.get("description")
+            or raw.get("samenvatting")
+            or ""
+        ).strip()
+        if not title:
+            logger.warning("Knoop %d overgeslagen: geen titel.", index)
             continue
+        if not summary:
+            summary = title
 
-        key_points = [
-            str(point).strip() for point in node.key_points if str(point).strip()
-        ][:5]
-        if not key_points:
-            key_points = [summary[:120]]
+        key_points = _normalize_key_points(
+            raw.get("key_points")
+            or raw.get("keyPoints")
+            or raw.get("kernpunten"),
+            summary,
+        )
+        difficulty = _clamp_scale(
+            raw.get("difficulty", raw.get("moeilijkheid")), 3
+        )
+        content_volume = _clamp_scale(
+            raw.get("content_volume", raw.get("contentVolume")), 3
+        )
+
+        raw_questions = raw.get("core_questions")
+        if not isinstance(raw_questions, list):
+            raw_questions = raw.get("questions")
+        if not isinstance(raw_questions, list):
+            raw_questions = []
 
         questions: list[dict[str, Any]] = []
-        for raw_question in node.core_questions:
-            try:
-                question = AICoreQuestion.model_validate(raw_question)
-            except ValidationError as exc:
-                logger.warning("Ongeldige kernvraag overgeslagen: %s", exc)
-                continue
-            questions.append(question.model_dump())
+        for raw_question in raw_questions:
+            normalized = _normalize_core_question(raw_question)
+            if normalized is not None:
+                questions.append(normalized)
             if len(questions) == 5:
                 break
 
         if not questions:
-            logger.warning("Knoop '%s' overgeslagen: geen geldige vragen.", title)
+            logger.warning(
+                "Knoop '%s' overgeslagen: geen geldige vragen.", title
+            )
             continue
 
-        temp_key = (node.temp_key or f"n{len(nodes) + 1}").strip()
+        temp_key = str(
+            raw.get("temp_key")
+            or raw.get("id")
+            or raw.get("key")
+            or f"n{index + 1}"
+        ).strip() or f"n{index + 1}"
+
         nodes.append(
             {
                 "temp_key": temp_key,
                 "title": title[:200],
                 "summary": summary,
                 "key_points": key_points,
+                "difficulty": difficulty,
+                "content_volume": content_volume,
                 "core_questions": questions,
             }
         )
 
     if not nodes:
+        logger.error(
+            "Na normalisatie bleven 0 bruikbare knopen over van %d ruwe knopen.",
+            len(raw_nodes),
+        )
         raise AIServiceError(
             "Het AI-model leverde geen bruikbare knopen. Probeer het opnieuw.",
             status_code=502,
@@ -297,14 +475,16 @@ def _sanitize_graph(data: dict[str, Any]) -> dict[str, Any]:
         used_keys.add(node["temp_key"])
 
     if not 5 <= len(nodes) <= 10:
-        logger.warning(
-            "Laag 1 leverde %d knopen (gevraagd: 5-10).", len(nodes)
-        )
+        logger.warning("Laag 1 leverde %d knopen (gevraagd: 5-10).", len(nodes))
+
+    raw_edges = data.get("edges")
+    if not isinstance(raw_edges, list):
+        raw_edges = data.get("relations")
 
     return {
         "description": description,
         "nodes": nodes,
-        "edges": _sanitize_edges(nodes, data.get("edges")),
+        "edges": _sanitize_edges(nodes, raw_edges),
     }
 
 
@@ -332,19 +512,39 @@ def generate_course_graph(
         f"Vak: {course_title}\n\n"
         "Cursusmateriaal:\n"
         f"{markdown}\n\n"
-        "Geef nu het JSON-object met description, nodes en edges."
+        "Geef nu het JSON-object met description, nodes (met difficulty en "
+        "content_volume), edges en core_questions."
     )
 
-    content = _chat_json(
-        client,
-        settings.LAYER1_MODEL,
-        LAYER1_SYSTEM_PROMPT,
-        user_prompt,
-        temperature=0.2,
-    )
-    _increment_metric(db, "layer1_calls")
-    data = _parse_json(content)
-    return _sanitize_graph(data)
+    content = ""
+    try:
+        content = _chat_json(
+            client,
+            settings.LAYER1_MODEL,
+            LAYER1_SYSTEM_PROMPT,
+            user_prompt,
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        _increment_metric(db, "layer1_calls")
+        data = extract_json_object(content)
+        return _sanitize_graph(data)
+    except AIServiceError:
+        logger.error(
+            "Laag 1 mislukt. Ruwe model-output (eerste 1500 tekens): %s",
+            (content or "<leeg>")[:1500],
+        )
+        raise
+    except Exception as exc:
+        logger.error("Onverwachte fout in Laag 1: %s", exc, exc_info=True)
+        logger.error(
+            "Ruwe model-output (eerste 1500 tekens): %s",
+            (content or "<leeg>")[:1500],
+        )
+        raise AIServiceError(
+            "Het AI-model leverde geen bruikbare knopen. Probeer het opnieuw.",
+            status_code=502,
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +574,7 @@ def generate_bridge_question(
         user_prompt,
     )
     _increment_metric(db, "layer3_calls")
-    data = _parse_json(content)
+    data = extract_json_object(content)
 
     try:
         question = AIBridgeQuestion.model_validate(data)
@@ -414,7 +614,7 @@ def evaluate_open_answer_or_hint(
         user_prompt,
     )
     _increment_metric(db, "layer3_calls")
-    data = _parse_json(content)
+    data = extract_json_object(content)
 
     try:
         evaluation = AIOpenEvaluation.model_validate(data)

@@ -114,6 +114,11 @@ def create_course(
             clean_tokens_total += int(result["clean_tokens_est"])
 
         combined_markdown = "\n\n".join(markdown_parts)
+        if len(combined_markdown.strip()) < 30:
+            raise HTTPException(
+                status_code=400,
+                detail="Geen leesbare tekst gevonden in het bestand.",
+            )
 
         try:
             graph = generate_course_graph(title, combined_markdown, db)
@@ -143,6 +148,8 @@ def create_course(
                     node_data["key_points"], ensure_ascii=False
                 ),
                 status="locked",
+                difficulty=node_data.get("difficulty", 3),
+                content_volume=node_data.get("content_volume", 3),
             )
             db.add(node)
             db.flush()
@@ -238,6 +245,8 @@ def get_course_graph(course_id: int, db: Session = Depends(get_db)):
                 "id": node.id,
                 "title": node.title,
                 "status": node.status,
+                "difficulty": node.difficulty or 3,
+                "content_volume": node.content_volume or 3,
                 "pos_x": node.pos_x or 0.0,
                 "pos_y": node.pos_y or 0.0,
             }

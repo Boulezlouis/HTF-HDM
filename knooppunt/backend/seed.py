@@ -511,6 +511,17 @@ DEMO_STATUSES = [
     "locked",
 ]
 
+# (difficulty, content_volume) per demo-knoop, zodat de grootteverschillen
+# meteen zichtbaar zijn in de graaf.
+DEMO_SIZES = [
+    (2, 3),
+    (4, 4),
+    (3, 4),
+    (4, 3),
+    (3, 2),
+    (5, 5),
+]
+
 # (source-index, target-index, relation_label) — indices in DEMO_NODES.
 DEMO_EDGES = [
     (0, 1, "is voorwaarde voor"),
@@ -573,6 +584,7 @@ def _seed_demo_course(db: Session) -> None:
     now = utcnow()
     for index, definition in enumerate(DEMO_NODES):
         status = DEMO_STATUSES[index]
+        difficulty, content_volume = DEMO_SIZES[index]
         node = Node(
             course_id=course.id,
             temp_key=f"n{index + 1}",
@@ -580,6 +592,8 @@ def _seed_demo_course(db: Session) -> None:
             summary=definition["summary"],
             key_points=json.dumps(definition["key_points"], ensure_ascii=False),
             status=status,
+            difficulty=difficulty,
+            content_volume=content_volume,
             pos_x=0.0,
             pos_y=0.0,
             completed_at=now if status == "completed" else None,
@@ -644,6 +658,31 @@ def _seed_demo_course(db: Session) -> None:
     if foundation is not None and foundation.unlocked_at is None:
         foundation.unlocked_at = now
 
+    db.commit()
+
+
+def ensure_demo_node_sizes(db: Session) -> None:
+    """Zet de demo-groottes ook in een bestaande DB die nog 3/3 als default heeft."""
+    course = db.query(Course).filter(Course.title == "Databanken").first()
+    if course is None:
+        return
+
+    nodes = (
+        db.query(Node)
+        .filter(Node.course_id == course.id)
+        .order_by(Node.id.asc())
+        .all()
+    )
+    if len(nodes) != len(DEMO_SIZES):
+        return
+    if not all(
+        node.difficulty == 3 and node.content_volume == 3 for node in nodes
+    ):
+        return
+
+    for node, (difficulty, content_volume) in zip(nodes, DEMO_SIZES):
+        node.difficulty = difficulty
+        node.content_volume = content_volume
     db.commit()
 
 

@@ -35,16 +35,16 @@ export default function ToastContainer({
         return (
           <div
             key={toast.id}
-            className="pointer-events-auto flex animate-[toast-in_0.2s_ease-out] items-start gap-3 rounded-xl border border-slate-200 bg-white/95 p-3.5 shadow-lg backdrop-blur"
+            className="pointer-events-auto flex animate-[toast-in_0.2s_ease-out] items-start gap-3 rounded-xl border border-emerald-500/40 bg-slate-900 p-3.5 text-slate-100 shadow-2xl"
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-600">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-300">
               <Icon size={17} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-semibold text-slate-800">
+              <p className="text-[12px] font-semibold text-slate-100">
                 {toast.title}
               </p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+              <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">
                 {toast.description}
               </p>
             </div>
@@ -52,7 +52,7 @@ export default function ToastContainer({
               type="button"
               onClick={() => onDismiss(toast.id)}
               title="Melding sluiten"
-              className="rounded p-0.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-500"
+              className="rounded p-0.5 text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
             >
               <X size={13} />
             </button>

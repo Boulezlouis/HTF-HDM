@@ -12,19 +12,22 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply antialiased;
     margin: 0;
+    background-color: #020617;
+    color: #f1f5f9;
   }
 
   ::selection {
-    @apply bg-indigo-200 text-indigo-900;
+    background: rgba(99, 102, 241, 0.45);
+    color: #ffffff;
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-color: #334155 transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
@@ -33,7 +36,7 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
+    background-color: #334155;
     border-radius: 9999px;
   }
 
@@ -70,4 +73,42 @@
 
 .react-flow__node-concept:focus-visible {
   outline: none;
+}
+
+.react-flow__node-concept.selected,
+.react-flow__node-concept:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Donkere React Flow-controls (zoom / fit view). */
+.react-flow__controls {
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.react-flow__controls-button {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-bottom: 1px solid #1e293b;
+  fill: #e2e8f0;
+}
+
+.react-flow__controls-button:hover {
+  background: #1e293b;
+}
+
+.react-flow__controls-button svg {
+  fill: #e2e8f0;
+}
+
+.react-flow__attribution {
+  background: transparent;
+  color: #475569;
+}
+
+.react-flow__attribution a {
+  color: #475569;
 }

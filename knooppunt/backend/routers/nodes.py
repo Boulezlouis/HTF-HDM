@@ -44,6 +44,8 @@ def get_node(node_id: int, db: Session = Depends(get_db)):
         "summary": node.summary,
         "key_points": json.loads(node.key_points or "[]"),
         "status": node.status,
+        "difficulty": node.difficulty or 3,
+        "content_volume": node.content_volume or 3,
         "prerequisites": prerequisites,
         "quiz": [
             {

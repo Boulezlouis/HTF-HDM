@@ -11,24 +11,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
-import type {
-  AnswerInput,
-  NodeDetail,
-  NodeStatus,
-  SubmitResult,
-} from '../types'
-
-const STATUS_LABEL: Record<NodeStatus, string> = {
-  completed: 'Voltooid',
-  available: 'Beschikbaar',
-  locked: 'Nog niet bereikt',
-}
-
-const STATUS_BADGE: Record<NodeStatus, string> = {
-  completed: 'bg-emerald-100 text-emerald-700',
-  available: 'bg-indigo-50 text-indigo-600',
-  locked: 'bg-slate-100 text-slate-500',
-}
+import type { AnswerInput, NodeDetail, SubmitResult } from '../types'
 
 interface NodeDrawerProps {
   node: NodeDetail | null
@@ -68,32 +51,17 @@ export default function NodeDrawer({
     }
   }, [result])
 
-  const effectiveStatus: NodeStatus | null = node
-    ? result?.node_status ?? node.status
-    : null
-
   return (
-    <div className="flex h-full w-[440px] max-w-full animate-[drawer-in_0.2s_ease-out] flex-col border-l border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <div className="min-w-0">
-          {effectiveStatus && (
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                STATUS_BADGE[effectiveStatus]
-              }`}
-            >
-              {STATUS_LABEL[effectiveStatus]}
-            </span>
-          )}
-          <h2 className="mt-2 text-base font-semibold leading-snug text-slate-900">
-            {node ? node.title : 'Knoop laden…'}
-          </h2>
-        </div>
+    <div className="flex h-full w-[440px] max-w-full animate-[drawer-in_0.2s_ease-out] flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-5 py-4">
+        <h2 className="min-w-0 text-base font-semibold leading-snug text-slate-100">
+          {node ? node.title : 'Knoop laden…'}
+        </h2>
         <button
           type="button"
           onClick={onClose}
           title="Sluiten"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
         >
           <X size={18} />
         </button>
@@ -101,32 +69,32 @@ export default function NodeDrawer({
 
       {loading && !node ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-400">
-          <Loader2 size={22} className="animate-spin text-indigo-500" />
+          <Loader2 size={22} className="animate-spin text-indigo-400" />
           <p className="text-xs">Knoop en 80/20-check laden…</p>
         </div>
       ) : !node ? (
-        <div className="flex flex-1 items-center justify-center px-6 text-center text-xs text-slate-400">
+        <div className="flex flex-1 items-center justify-center px-6 text-center text-xs text-slate-500">
           Deze knoop kon niet geladen worden.
         </div>
       ) : (
         <>
           {node.status === 'locked' && (
-            <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
-              <Info size={14} className="mt-0.5 shrink-0 text-slate-400" />
+            <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
+              <Info size={14} className="mt-0.5 shrink-0 text-slate-500" />
               <span>
                 Tip: rond eerst de voorgaande knopen af voor het beste begrip.
               </span>
             </div>
           )}
 
-          <div className="mt-4 flex gap-1 border-b border-slate-200 px-5">
+          <div className="mt-4 flex gap-1 border-b border-slate-800 px-5">
             <button
               type="button"
               onClick={() => setTab('core')}
               className={`-mb-px border-b-2 px-2 pb-2.5 text-[12px] font-semibold transition ${
                 tab === 'core'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-slate-400 hover:text-slate-600'
+                  ? 'border-indigo-400 text-indigo-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
               Kern &amp; Verbanden
@@ -136,8 +104,8 @@ export default function NodeDrawer({
               onClick={() => setTab('quiz')}
               className={`-mb-px border-b-2 px-2 pb-2.5 text-[12px] font-semibold transition ${
                 tab === 'quiz'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-slate-400 hover:text-slate-600'
+                  ? 'border-indigo-400 text-indigo-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
               De 80/20 Check
@@ -147,20 +115,20 @@ export default function NodeDrawer({
           <div className="flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">
             {tab === 'core' ? (
               <div>
-                <p className="text-[13px] leading-relaxed text-slate-600">
+                <p className="text-[13px] leading-relaxed text-slate-300">
                   {node.summary}
                 </p>
 
-                <p className="mt-5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <p className="mt-5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Kernpunten
                 </p>
                 <ol className="mt-2 space-y-2.5">
                   {node.key_points.map((point, index) => (
                     <li
                       key={`${node.id}-point-${index}`}
-                      className="flex gap-2.5 text-[13px] leading-relaxed text-slate-700"
+                      className="flex gap-2.5 text-[13px] leading-relaxed text-slate-200"
                     >
-                      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-600">
+                      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-indigo-500/20 text-[10px] font-bold text-indigo-300">
                         {index + 1}
                       </span>
                       <span>{point}</span>
@@ -170,7 +138,7 @@ export default function NodeDrawer({
 
                 {node.prerequisites.length > 0 && (
                   <div className="mt-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Hangt samen met
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -179,12 +147,12 @@ export default function NodeDrawer({
                           key={prerequisite.id}
                           type="button"
                           onClick={() => onSelectNode(prerequisite.id)}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-200 transition hover:bg-slate-700 hover:text-white"
                         >
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${
                               prerequisite.status === 'completed'
-                                ? 'bg-emerald-500'
+                                ? 'bg-emerald-400'
                                 : 'bg-amber-400'
                             }`}
                           />
@@ -199,7 +167,7 @@ export default function NodeDrawer({
                   type="button"
                   onClick={() => setTab('quiz')}
                   disabled={node.quiz.length === 0}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <PlayCircle size={17} />
                   Start 80/20 Check
@@ -254,7 +222,7 @@ function QuizView({
   const quiz = node.quiz
   if (quiz.length === 0) {
     return (
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-500">
         Voor deze knoop zijn nog geen vragen beschikbaar.
       </p>
     )
@@ -279,7 +247,7 @@ function QuizView({
 
   return (
     <div>
-      <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+      <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
         <span>
           Vraag {safeIndex + 1}/{quiz.length}
         </span>
@@ -287,7 +255,7 @@ function QuizView({
           {answeredCount}/{quiz.length} beantwoord
         </span>
       </div>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
         <div
           className="h-full rounded-full bg-indigo-500 transition-all duration-300"
           style={{ width: `${((safeIndex + 1) / quiz.length) * 100}%` }}
@@ -296,17 +264,17 @@ function QuizView({
 
       <div className="mt-4">
         {question.category === 'core_80' ? (
-          <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-600">
+          <span className="inline-flex items-center rounded-full border border-indigo-500/30 bg-indigo-500/20 px-2 py-1 text-[10px] font-semibold text-indigo-300">
             Kernvraag (80%)
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700">
+          <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/20 px-2 py-1 text-[10px] font-semibold text-amber-300">
             Terugkoppeling naar: {question.linked_node_title ?? 'vorige knoop'}{' '}
             (20%)
           </span>
         )}
 
-        <h3 className="mt-3 text-[15px] font-semibold leading-snug text-slate-900">
+        <h3 className="mt-3 text-[15px] font-semibold leading-snug text-slate-100">
           {question.prompt}
         </h3>
 
@@ -321,7 +289,7 @@ function QuizView({
               }))
             }
             placeholder="Typ je antwoord…"
-            className="mt-4 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[13px] leading-relaxed text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="mt-4 w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-[13px] leading-relaxed text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
           />
         ) : (
           <div className="mt-4 space-y-2">
@@ -339,15 +307,15 @@ function QuizView({
                   }
                   className={`flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-3 text-left text-[13px] leading-snug transition ${
                     selected
-                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900 ring-1 ring-indigo-500'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                      ? 'border-indigo-400 bg-indigo-500/20 text-slate-100 ring-1 ring-indigo-400'
+                      : 'border-slate-700 bg-slate-800/70 text-slate-100 hover:border-indigo-400'
                   }`}
                 >
                   <span
                     className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
                       selected
-                        ? 'border-indigo-500 bg-indigo-500 text-white'
-                        : 'border-slate-300 bg-white'
+                        ? 'border-indigo-400 bg-indigo-500 text-white'
+                        : 'border-slate-500 bg-transparent'
                     }`}
                   >
                     {selected && <Check size={10} strokeWidth={3} />}
@@ -365,7 +333,7 @@ function QuizView({
           type="button"
           disabled={safeIndex === 0}
           onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-2 text-[12px] font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronLeft size={14} />
           Vorige
@@ -377,7 +345,7 @@ function QuizView({
             onClick={() =>
               setCurrentIndex((index) => Math.min(quiz.length - 1, index + 1))
             }
-            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-indigo-700"
+            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-indigo-500"
           >
             Volgende
             <ChevronRight size={14} />
@@ -387,7 +355,7 @@ function QuizView({
             type="button"
             disabled={!allAnswered || submitting}
             onClick={submit}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? (
               <Loader2 size={14} className="animate-spin" />
@@ -400,7 +368,7 @@ function QuizView({
       </div>
 
       {isLast && !allAnswered && (
-        <p className="mt-2 text-center text-[10px] text-slate-400">
+        <p className="mt-2 text-center text-[10px] text-slate-500">
           Beantwoord alle vragen om te kunnen controleren.
         </p>
       )}
@@ -425,20 +393,20 @@ function ResultView({ node, result, onClose, onRetry }: ResultViewProps) {
         <div
           className={`mx-auto grid h-20 w-20 place-items-center rounded-full ${
             result.passed
-              ? 'bg-emerald-100 text-emerald-700'
-              : 'bg-amber-100 text-amber-700'
+              ? 'bg-emerald-500/15 text-emerald-300'
+              : 'bg-amber-500/15 text-amber-300'
           }`}
         >
           <span className="text-2xl font-bold">
             {Math.round(result.score_percentage)}%
           </span>
         </div>
-        <p className="mt-3 text-sm font-semibold text-slate-800">
+        <p className="mt-3 text-sm font-semibold text-slate-100">
           {correct} van {total} juist
         </p>
         <p
           className={`mt-1 text-[12px] ${
-            result.passed ? 'text-emerald-600' : 'text-slate-500'
+            result.passed ? 'text-emerald-300' : 'text-slate-400'
           }`}
         >
           {result.passed
@@ -453,40 +421,45 @@ function ResultView({ node, result, onClose, onRetry }: ResultViewProps) {
             (item) => item.question_id === question.id,
           )
           if (!questionResult) return null
+          const isCorrect = questionResult.is_correct
           return (
             <div
               key={question.id}
               className={`rounded-xl border px-3.5 py-3 ${
-                questionResult.is_correct
-                  ? 'border-emerald-200 bg-emerald-50/60'
-                  : 'border-rose-200 bg-rose-50/60'
+                isCorrect
+                  ? 'border-emerald-500/40 bg-emerald-950/60 text-emerald-200'
+                  : 'border-rose-500/40 bg-rose-950/60 text-rose-200'
               }`}
             >
               <div className="flex items-start gap-2">
-                {questionResult.is_correct ? (
+                {isCorrect ? (
                   <CheckCircle2
                     size={15}
-                    className="mt-0.5 shrink-0 text-emerald-600"
+                    className="mt-0.5 shrink-0 text-emerald-400"
                   />
                 ) : (
                   <XCircle
                     size={15}
-                    className="mt-0.5 shrink-0 text-rose-500"
+                    className="mt-0.5 shrink-0 text-rose-400"
                   />
                 )}
                 <div className="min-w-0">
-                  <p className="text-[12px] font-semibold leading-snug text-slate-800">
+                  <p className="text-[12px] font-semibold leading-snug text-slate-100">
                     {index + 1}. {question.prompt}
                   </p>
-                  {!questionResult.is_correct && (
-                    <p className="mt-1 text-[11px] leading-snug text-rose-700">
+                  {!isCorrect && (
+                    <p className="mt-1 text-[11px] leading-snug text-rose-300">
                       Juist antwoord:{' '}
                       <span className="font-medium">
                         {questionResult.correct_answer}
                       </span>
                     </p>
                   )}
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                  <p
+                    className={`mt-1 text-[11px] leading-relaxed ${
+                      isCorrect ? 'text-emerald-200/80' : 'text-rose-200/80'
+                    }`}
+                  >
                     {questionResult.explanation}
                   </p>
                 </div>
@@ -500,7 +473,7 @@ function ResultView({ node, result, onClose, onRetry }: ResultViewProps) {
         <button
           type="button"
           onClick={onClose}
-          className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500"
         >
           Terug naar de graaf
         </button>
@@ -508,7 +481,7 @@ function ResultView({ node, result, onClose, onRetry }: ResultViewProps) {
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
           >
             <RotateCcw size={14} />
             Opnieuw proberen

@@ -40,6 +40,8 @@ class GraphNodeOut(BaseModel):
     id: int
     title: str
     status: NodeStatus
+    difficulty: int
+    content_volume: int
     pos_x: float
     pos_y: float
 
@@ -79,6 +81,8 @@ class NodeDetailOut(BaseModel):
     summary: str
     key_points: list[str]
     status: NodeStatus
+    difficulty: int
+    content_volume: int
     prerequisites: list[PrerequisiteOut]
     quiz: list[QuizQuestionOut]
 

@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import sys
@@ -23,6 +24,8 @@ from markitdown import MarkItDown
 from sqlalchemy.orm import Session
 
 from models import DocumentCache, UsageMetric
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Regex-patronen
@@ -260,6 +263,21 @@ def process_file(
     pages = _skip_trivial_pages(pages)
     # 6. Witruimte comprimeren
     clean_markdown = _compress_whitespace("\n\n".join(pages))
+
+    # Veiligheidsnet: nooit een (bijna) lege tekst teruggeven wanneer de ruwe
+    # extractie wél inhoud bevatte. Dit gebeurt bijvoorbeeld wanneer de
+    # herhaalde-regel-filter te agressief was op een deck met veel footers.
+    if len(clean_markdown.strip()) < 100 and len(raw_full_text.strip()) > 100:
+        logger.warning(
+            "Opschoning liet %d tekens over; val terug op de ruwe tekst.",
+            len(clean_markdown.strip()),
+        )
+        fallback = IMAGE_RE.sub("", raw_full_text)
+        fallback = "\n".join(
+            line for line in fallback.split("\n") if line.strip()
+        )
+        clean_markdown = _compress_whitespace(fallback)
+
     clean_tokens_est = len(clean_markdown) // 4
 
     db.add(

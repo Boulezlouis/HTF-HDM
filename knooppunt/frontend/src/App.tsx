@@ -5,7 +5,6 @@ import {
   getAchievements,
   getCourseGraph,
   getCourses,
-  getMetrics,
   getNode,
   submitQuiz,
 } from './api'
@@ -20,7 +19,6 @@ import type {
   AnswerInput,
   CourseGraph,
   CourseSummary,
-  Metrics,
   NodeDetail,
   SubmitResult,
   ToastMessage,
@@ -37,7 +35,6 @@ export default function App() {
   const [activeCourseId, setActiveCourseId] = useState<number | null>(null)
   const [graph, setGraph] = useState<CourseGraph | null>(null)
   const [graphLoading, setGraphLoading] = useState(false)
-  const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [achievements, setAchievements] = useState<Achievement[]>([])
 
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
@@ -79,7 +76,6 @@ export default function App() {
       try {
         const data = await getCourseGraph(courseId)
         setGraph(data)
-        setMetrics(await getMetrics())
       } catch (error) {
         setGraph(null)
         pushToast('Graaf laden mislukt', errorMessage(error), 'Sparkles')
@@ -103,8 +99,6 @@ export default function App() {
         setCourses(courseList)
         if (courseList.length > 0) {
           await selectCourse(courseList[0].id)
-        } else {
-          setMetrics(await getMetrics())
         }
       } catch (error) {
         if (!cancelled) {
@@ -127,7 +121,6 @@ export default function App() {
       try {
         const detail = await getNode(nodeId)
         setNodeDetail(detail)
-        setMetrics(await getMetrics())
       } catch (error) {
         setSelectedNodeId(null)
         pushToast('Knoop laden mislukt', errorMessage(error), 'Sparkles')
@@ -177,8 +170,6 @@ export default function App() {
         if (freshGraph !== null) setGraph(freshGraph)
         setCourses(courseList)
         setAchievements(achievementList)
-        // Metrics pas ophalen nadat de graaf-call zijn teller heeft verhoogd.
-        setMetrics(await getMetrics())
       } catch (error) {
         pushToast('Inzending mislukt', errorMessage(error), 'Sparkles')
       } finally {
@@ -195,7 +186,6 @@ export default function App() {
     try {
       const detail = await getNode(selectedNodeId)
       setNodeDetail(detail)
-      setMetrics(await getMetrics())
     } catch (error) {
       pushToast('Nieuwe poging laden mislukt', errorMessage(error), 'Sparkles')
     } finally {
@@ -210,7 +200,6 @@ export default function App() {
         const remaining = await getCourses()
         setCourses(remaining)
         setAchievements(await getAchievements())
-        setMetrics(await getMetrics())
 
         if (activeCourseId === courseId) {
           setActiveCourseId(null)
@@ -241,7 +230,7 @@ export default function App() {
   )
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
       <Sidebar
         open={sidebarOpen}
         onToggle={() => setSidebarOpen((current) => !current)}
@@ -263,7 +252,6 @@ export default function App() {
         ) : graph !== null ? (
           <GraphCanvas
             graph={graph}
-            metrics={metrics}
             selectedNodeId={selectedNodeId}
             onNodeSelect={(nodeId) => void openNode(nodeId)}
           />
@@ -272,7 +260,7 @@ export default function App() {
         )}
 
         {graphLoading && graph !== null && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-50/40">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50">
             <Loader2 size={22} className="animate-spin text-indigo-500" />
           </div>
         )}
@@ -313,13 +301,13 @@ export default function App() {
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-indigo-50 text-indigo-500">
+      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-indigo-500/10 text-indigo-400">
         <Layers size={30} />
       </div>
-      <h2 className="mt-4 text-lg font-semibold text-slate-800">
+      <h2 className="mt-4 text-lg font-semibold text-slate-100">
         Nog geen vak geselecteerd
       </h2>
-      <p className="mt-1 max-w-sm text-sm leading-relaxed text-slate-500">
+      <p className="mt-1 max-w-sm text-sm leading-relaxed text-slate-400">
         Maak een vak aan op basis van een PDF of PPTX, of kies een bestaand vak
         in de zijbalk.
       </p>

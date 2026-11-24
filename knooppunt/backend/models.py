@@ -59,6 +59,8 @@ class Node(Base):
     summary = Column(Text, nullable=False)
     key_points = Column(Text, nullable=False)
     status = Column(String(20), nullable=False, default="locked")
+    difficulty = Column(Integer, nullable=False, default=3)
+    content_volume = Column(Integer, nullable=False, default=3)
     pos_x = Column(Float, default=0.0)
     pos_y = Column(Float, default=0.0)
     completed_at = Column(DateTime, nullable=True)

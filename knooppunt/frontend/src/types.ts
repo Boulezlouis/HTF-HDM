@@ -29,6 +29,8 @@ export interface GraphNode {
   id: number
   title: string
   status: NodeStatus
+  difficulty: number
+  content_volume: number
   pos_x: number
   pos_y: number
 }
@@ -68,6 +70,8 @@ export interface NodeDetail {
   summary: string
   key_points: string[]
   status: NodeStatus
+  difficulty: number
+  content_volume: number
   prerequisites: Prerequisite[]
   quiz: QuizQuestion[]
 }
